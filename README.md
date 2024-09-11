@@ -1,5 +1,7 @@
 # K8s cluster with Kubespray
 
+Spinnng up a cluster setup on virtualbox via Vagrant. Testing ground before testing on actual servers :_skull
+
 - Install Vagrant CLI
 - Install virtualbox on Mac (version 7.0.0)
 - `vagrant up --provider=virtualbox`
