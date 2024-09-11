@@ -1,59 +1,71 @@
-IMAGE_NAME = "centos/7"
+IMAGE_NAME = "https://github.com/naveenrajm7/utm-box/releases/download/debian-11/debian_vagrant_utm.zip"
 MASTERS = 1
-NODES = 3
+NODES = 2
 
 Vagrant.configure("2") do |config|
-    config.ssh.insert_key = false
+  config.ssh.insert_key = false
 
-    config.vm.provider "virtualbox" do |v|
-        v.memory = 2048
-        v.cpus = 1
+  # Configure the UTM provider globally
+  config.vm.provider :utm do |utm|
+    utm.utm_file_url = IMAGE_NAME
+    utm.memory = 2048
+    utm.cpus = 2
+  end
+
+  # Define the master node
+  config.vm.define "master" do |master|
+    master.vm.hostname = "master"
+    master.vm.network "private_network", ip: "192.168.56.10"
+    
+    master.vm.provision "shell", privileged: true, inline: <<-SHELL
+      set -e
+      echo "Updating package list..."
+      sudo apt-get update
+      echo "Installing python3-pip and git..."
+      sudo apt-get install -y python3-pip git
+      echo "Upgrading pip and installing Ansible and ruamel.yaml..."
+      sudo pip3 install --upgrade "ansible>=2.16.4,<2.17.0" ruamel.yaml
+      echo "Cloning kubespray repository..."
+      git clone https://github.com/kubernetes-sigs/kubespray.git /home/vagrant/kubespray
+      if [ -d "/home/vagrant/kubespray" ]; then
+        echo "Kubespray directory created successfully."
+      else
+        echo "Failed to create kubespray directory."
+        exit 1
+      fi
+      cd /home/vagrant/kubespray
+      echo "Installing kubespray requirements..."
+      pip3 install -r requirements.txt
+      echo "Initial provisioning script completed."
+    SHELL
+  end
+
+  # Define the worker nodes
+  (1..NODES).each do |i|
+    config.vm.define "node-#{i}" do |node|
+      node.vm.hostname = "node-#{i}"
+      node.vm.network "private_network", ip: "192.168.56.#{10+i}"
+      
+      node.vm.provision "shell", inline: <<-SHELL
+        sudo apt-get update
+        sudo apt-get install -y python3-pip
+      SHELL
     end
+  end
 
-    (1..MASTERS).each do |i| 
-        config.vm.define "master-#{i}" do |master|
-            master.vm.box = IMAGE_NAME
-            master.vm.network "private_network", ip: "192.168.57.#{i + 100}"
-            master.vm.hostname = "master-#{i}"
-
-            # naming the virtualmachine
-            master.vm.provider :virtualbox do |vb|
-                vb.name = "master-#{i}"
-            end
-            # change ansible to ansible_local if you are running from windows,
-            # so that vagrant will install ansible inside VM and run ansible playbooks
-            # eg: master.vm.provision "ansible_local" do |ansible|
-            master.vm.provision "ansible_local" do |ansible|
-                ansible.compatibility_mode = "2.0"
-                ansible.playbook = "node-config.yml"
-                ansible.extra_vars = {
-                    node_ip: "192.168.50.#{i + 10}",
-                }
-            end
-        end
-    end
-
-    (1..NODES).each do |i|
-        config.vm.define "node-#{i}" do |node|
-            node.vm.box = IMAGE_NAME
-            node.vm.network "private_network", ip: "192.168.57.#{i + 110}"
-            node.vm.hostname = "node-#{i}"
-
-            # naming the virtualmachine
-            node.vm.provider :virtualbox do |vb|
-                vb.name = "node-#{i}"
-            end
-            
-            # change ansible to ansible_local if you are running from windows,
-            # so that vagrant will install ansible inside VM and run ansible playbooks
-            # eg: node.vm.provision "ansible_local" do |ansible|
-            node.vm.provision "ansible_local" do |ansible|
-                ansible.compatibility_mode = "2.0"
-                ansible.playbook = "node-config.yml"
-                ansible.extra_vars = {
-                    node_ip: "192.168.50.#{i + 20}",
-                }
-            end
-        end
-    end
+  # Provision Kubespray on the master node after all nodes are up
+  config.vm.provision "shell", privileged: true, run: "always", inline: <<-SHELL
+    if [[ $(hostname) == "master" ]]; then
+      if [ -d "/home/vagrant/kubespray" ]; then
+        cd /home/vagrant/kubespray
+        cp -rfp inventory/sample inventory/mycluster
+        declare -a IPS=(192.168.56.10 192.168.56.11 192.168.56.12)
+        CONFIG_FILE=inventory/mycluster/hosts.yaml python3 contrib/inventory_builder/inventory.py ${IPS[@]}
+        ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root cluster.yml
+      else
+        echo "Kubespray directory not found. Provisioning failed."
+        exit 1
+      fi
+    fi
+  SHELL
 end
