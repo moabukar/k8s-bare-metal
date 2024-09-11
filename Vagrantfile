@@ -59,9 +59,9 @@ Vagrant.configure("2") do |config|
       if [ -d "/home/vagrant/kubespray" ]; then
         cd /home/vagrant/kubespray
         cp -rfp inventory/sample inventory/mycluster
-        declare -a IPS=(192.168.56.10 192.168.56.11 192.168.56.12)
+        declare -a IPS=("127.0.0.1:2222" "127.0.0.1:2200" "127.0.0.1:2201")
         CONFIG_FILE=inventory/mycluster/hosts.yaml python3 contrib/inventory_builder/inventory.py ${IPS[@]}
-        ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root cluster.yml
+        ansible-playbook -i inventory/mycluster/hosts.yaml cluster.yml -u vagrant -b
       else
         echo "Kubespray directory not found. Provisioning failed."
         exit 1
