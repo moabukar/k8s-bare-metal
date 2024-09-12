@@ -12,7 +12,10 @@ Spinnng up a cluster setup on virtualbox via Vagrant. Testing ground before test
 
 - `vagrant plugin install vagrant_utm`
 - `vagrant up`
+- `vagrant destroy -f`
 - `vagrant reload node-2 --provision`
+
+`sed -i 's/ansible==9.8.0/ansible>=2.9,<2.10/' requirements.txt`
 
 - Install UTM if using Mac
 
