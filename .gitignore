@@ -2,3 +2,5 @@
 .vagrant/
 .env
 .pem
+
+*admin.conf
